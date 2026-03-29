@@ -2,10 +2,13 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.graph_objects as go
+import os # <-- Add this
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="CreditSaathi MSME Intelligence", page_icon="📈", layout="wide")
-API_URL = "http://localhost:8000/api/v1" # Pointing to our local FastAPI backend
+
+# Fetch the API URL from the environment, defaulting to localhost if not found
+API_URL = os.getenv("API_URL", "http://localhost:8000/api/v1")
 
 # --- SESSION STATE MANAGEMENT ---
 # This ensures data isn't lost when we click between tabs
