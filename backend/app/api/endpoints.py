@@ -1,8 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.models.schemas import BusinessInput, ScoreResponse, FullReportResponse
 
-# Import our new Scoring Engine
+# Importing all the custom engines we just built
 from app.services.scorer import CreditScoringEngine
+from app.services.insights import InsightEngine
+from app.services.matcher import LenderMatchEngine
 
 router = APIRouter()
 
@@ -13,6 +15,9 @@ async def upload_statement(
     gstin: str = Form(...),
     vintage_years: float = Form(...)
 ):
+    """
+    Accepts a PDF/CSV bank statement and basic business details.
+    """
     if not file.filename.endswith(('.pdf', '.csv')):
         raise HTTPException(status_code=400, detail="Only PDF and CSV files are supported.")
     
@@ -20,35 +25,69 @@ async def upload_statement(
     return {
         "status": "success", 
         "message": f"File {file.filename} processed successfully.",
-        "simulated_data_extraction": "Pending Phase 4 database linkage"
+        "simulated_data_extraction": "Pending Database Linkage"
     }
 
 @router.post("/calculate-score", response_model=ScoreResponse, summary="Generate Credit Readiness Score")
 async def calculate_score(user_data: BusinessInput):
     """
-    Triggers the scoring engine using the parsed financial data and GST inputs.
+    Triggers the scoring engine standalone. 
+    (Useful if the frontend just wants to show the score before the full report).
     """
-    # 1. Simulate the data that would normally be pulled from the 'financial_data' SQL table
     mock_parsed_data = {
         "monthly_revenue": 150000.0,
         "cash_flow_volatility_pct": 25.0,
         "estimated_monthly_emi": 30000.0
     }
     
-    # 2. Execute the actual mathematical engine we built in Phase 5
     result = CreditScoringEngine.calculate_crs(
         parsed_financials=mock_parsed_data, 
         user_inputs=user_data.model_dump() 
     )
     
-    # 3. Return the exact structure our Pydantic schema expects
     return {
-        "user_id": 1, # Hardcoded temporarily until we connect the DB
+        "user_id": 1,
         "total_score": result["total_score"],
         "breakdown": result["breakdown"],
         "risk_tier": result["risk_tier"]
     }
 
-@router.get("/get-report/{user_id}", response_model=FullReportResponse, summary="Fetch Comprehensive Credit Report")
-async def get_report(user_id: int):
-    raise HTTPException(status_code=501, detail="Report generation logic pending Phase 6 & 7")
+@router.post("/get-report", response_model=FullReportResponse, summary="Generate Complete Credit Intelligence Report")
+async def generate_full_report(user_data: BusinessInput):
+    """
+    The Master Orchestrator. 
+    Takes MSME inputs, calculates the score, drafts insights, and finds lenders in one payload.
+    """
+    # 1. Simulate parsed financial data
+    mock_parsed_data = {
+        "monthly_revenue": 250000.0,      # ₹2.5 Lakhs/month -> ₹30L Annual
+        "cash_flow_volatility_pct": 25.0,
+        "estimated_monthly_emi": 30000.0
+    }
+    
+    # 2. Generate the Score
+    score_result = CreditScoringEngine.calculate_crs(
+        parsed_financials=mock_parsed_data, 
+        user_inputs=user_data.model_dump()
+    )
+    
+    # 3. Generate Actionable Insights
+    insights_list = InsightEngine.generate(breakdown=score_result["breakdown"])
+    
+    # 4. Find Eligible Lenders
+    lender_matches = LenderMatchEngine.find_eligible_lenders(
+        user_score=score_result["total_score"],
+        monthly_revenue=mock_parsed_data["monthly_revenue"]
+    )
+    
+    # 5. Return the full aggregated package
+    return {
+        "score_data": {
+            "user_id": 1,
+            "total_score": score_result["total_score"],
+            "breakdown": score_result["breakdown"],
+            "risk_tier": score_result["risk_tier"]
+        },
+        "insights": insights_list,
+        "eligible_lenders": lender_matches
+    }
